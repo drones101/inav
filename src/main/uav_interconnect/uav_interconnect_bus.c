@@ -55,7 +55,6 @@ typedef enum {
     UIB_FLAG_HAS_WRITE      = (1 << 1),     // Device supports WRITE command (sensor configuration or executive device)
 } uibDeviceFlags_e;
 
-#define UIB_MAX_DEVICES         256
 #define UIB_MAX_SLOTS           16
 #define UIB_BIT_RATE            115200
 #define UIB_PORT_OPTIONS        (SERIAL_NOT_INVERTED | SERIAL_STOPBITS_1 | SERIAL_PARITY_NO | SERIAL_UNIDIR)
@@ -96,7 +95,6 @@ typedef struct {
 static serialPort_t *           busPort;
 static bool                     uibInitialized = false;
 
-static uavInterconnectSlot_t *  devices[UIB_MAX_DEVICES];
 static uavInterconnectSlot_t    slots[UIB_MAX_SLOTS];
 static timeUs_t                 slotStartTimeUs;
 static uavInterconnectState_t   busState = STATE_INITIALIZE;
@@ -154,7 +152,19 @@ static void sendWrite(timeUs_t currentTimeUs, uint8_t slot, uint8_t * data)
     uibStats.sentCommands++;
 }
 
-static int uavInterconnectFindEmptySlot(void)
+static uavInterconnectSlot_t * findDevice(uint8_t devId)
+{
+    for (int i = 0; i < UIB_MAX_SLOTS; i++) {
+        if (slots[i].allocated && slots[i].deviceAddress == devId) {
+            return &slots[i];
+        }
+    }
+
+    return NULL;
+}
+
+
+static int findEmptySlot(void)
 {
     for (int i = 0; i < UIB_MAX_SLOTS; i++) {
         if (!slots[i].allocated)
@@ -164,7 +174,7 @@ static int uavInterconnectFindEmptySlot(void)
     return -1;
 }
 
-static void uavInterconnectProcessSlot(void)
+static void processSlot(void)
 {
     // First byte is command / slot
     uint8_t cmd = slotDataBuffer[0] & 0xC0;
@@ -199,11 +209,8 @@ static void uavInterconnectProcessSlot(void)
                         slots[slot].lastPollTimeUs = 0;
                         slots[slot].unrepliedRequests = 0;
 
-                        // Save pointer to slot to be able to address device by DevID internally
-                        devices[slots[slot].deviceAddress] = &slots[slot];
-
                         // Find next slot for discovery process
-                        discoverySlot = uavInterconnectFindEmptySlot();
+                        discoverySlot = findEmptySlot();
                         uibStats.discoveredDevices++;
                     }
                 }
@@ -264,7 +271,7 @@ static void uavInterconnectProcessSlot(void)
     }
 }
 
-static void uibProcessScheduledTransactions(timeUs_t currentTimeUs)
+static void processScheduledTransactions(timeUs_t currentTimeUs)
 {
     int slotPrio = 0x100;
     int slotId = -1;
@@ -354,7 +361,7 @@ void uavInterconnectBusTask(timeUs_t currentTimeUs)
 
     // If we have new bytes - process packet
     if (hasNewBytes && slotDataBufferCount >= 12) {  // minimum transaction length is 12 bytes - no point in processing something smaller
-        uavInterconnectProcessSlot();
+        processSlot();
     }
 
     // Process request scheduling - we can initiate another slot if guard interval has elapsed and slot interval has elapsed as well
@@ -394,7 +401,7 @@ void uavInterconnectBusTask(timeUs_t currentTimeUs)
                 // If no device is ready to be polled at the moment:
                 // issue IDENTIFY command for one of the existing devices. This will allow re-discovery of 
                 // temporary disconnected devices (due to device intermittent failure)
-                uibProcessScheduledTransactions(currentTimeUs);
+                processScheduledTransactions(currentTimeUs);
                 break;
         }
     }
@@ -408,8 +415,8 @@ void uavInterconnectBusTask(timeUs_t currentTimeUs)
 
 void uavInterconnectBusInit(void)
 {
-    for (int i = 0; i < UIB_MAX_DEVICES; i++) {
-        devices[i] = NULL;
+    for (int i = 0; i < UIB_MAX_SLOTS; i++) {
+        slots[i].allocated = false;
     }
 
     serialPortConfig_t * portConfig = findSerialPortConfig(FUNCTION_UAV_INTERCONNECT);
@@ -431,63 +438,82 @@ bool uavInterconnectBusIsInitialized(void)
 
 bool uibDeviceDetected(uint8_t devId)
 {
-    if (!devices[devId])
+    uavInterconnectSlot_t * slot = findDevice(devId);
+    if (slot == NULL)
         return false;
 
-    return devices[devId]->allocated;
+    return slot->allocated;
 }
 
 bool uibGetDeviceParams(uint8_t devId, uint8_t * params)
 {
-    if (!devices[devId] || !params)
+    uavInterconnectSlot_t * slot = findDevice(devId);
+    if (slot == NULL || params == NULL)
         return false;
 
-    params[0] = devices[devId]->devParams[0];
-    params[1] = devices[devId]->devParams[1];
-    params[2] = devices[devId]->devParams[2];
-    params[3] = devices[devId]->devParams[3];
+    params[0] = slot->devParams[0];
+    params[1] = slot->devParams[1];
+    params[2] = slot->devParams[2];
+    params[3] = slot->devParams[3];
     return true;
 }
 
 timeUs_t uibGetPollRateUs(uint8_t devId)
 {
-    if (!devices[devId])
+    uavInterconnectSlot_t * slot = findDevice(devId);
+    if (slot == NULL)
         return 0;
 
-    return devices[devId]->pollIntervalUs;
+    return slot->pollIntervalUs;
 }
 
 uint32_t uibGetUnansweredRequests(uint8_t devId)
 {
-    if (!devices[devId])
+    uavInterconnectSlot_t * slot = findDevice(devId);
+    if (slot == NULL)
         return 0;
 
-    return (devices[devId]->unrepliedRequests < 2) ? 0 : devices[devId]->unrepliedRequests - 1;
+    return (slot->unrepliedRequests < 2) ? 0 : slot->unrepliedRequests - 1;
 }
 
 bool uibDataAvailable(uint8_t devId)
 {
-    if (!devices[devId])
+    uavInterconnectSlot_t * slot = findDevice(devId);
+    if (slot == NULL)
         return false;
 
-    return devices[devId]->rxDataReady;
+    return slot->rxDataReady;
 }
 
 bool uibRead(uint8_t devId, uint8_t * buffer)
 {
-    if (!devices[devId])
+    uavInterconnectSlot_t * slot = findDevice(devId);
+    if (slot == NULL)
         return false;
 
     // If no READ capability - fail 
-    if (!(devices[devId]->deviceFlags & UIB_FLAG_HAS_READ))
+    if (!(slot->deviceFlags & UIB_FLAG_HAS_READ))
         return false;
 
     // If no data ready - fail
-    if (!devices[devId]->rxDataReady)
+    if (!slot->rxDataReady)
         return false;
 
-    memcpy(buffer, devices[devId]->rxPacket, UIB_PACKET_SIZE);
-    devices[devId]->rxDataReady = false;
+    memcpy(buffer, slot->rxPacket, UIB_PACKET_SIZE);
+    slot->rxDataReady = false;
+
+    return true;
+}
+
+static bool slotCanWrite(const uavInterconnectSlot_t * slot)
+{
+    // If no WRITE capability - fail 
+    if (!(slot->deviceFlags & UIB_FLAG_HAS_WRITE))
+        return false;
+
+    // If we have unsent data in the buffer - fail
+    if (slot->txDataReady)
+        return false;
 
     return true;
 }
@@ -495,25 +521,22 @@ bool uibRead(uint8_t devId, uint8_t * buffer)
 bool uibCanWrite(uint8_t devId)
 {
     // No device available
-    if (!devices[devId])
+    uavInterconnectSlot_t * slot = findDevice(devId);
+    if (slot == NULL)
         return false;
 
-    // If no WRITE capability - fail 
-    if (!(devices[devId]->deviceFlags & UIB_FLAG_HAS_WRITE))
-        return false;
-
-    // If we have unsent data in the buffer - fail
-    if (devices[devId]->txDataReady)
-        return false;
-
-    return true;
+    return slotCanWrite(slot);
 }
 
 bool uibWrite(uint8_t devId, const uint8_t * buffer)
 {
-    if (uibCanWrite(devId)) {
-        memcpy(devices[devId]->txPacket, buffer, UIB_PACKET_SIZE);
-        devices[devId]->txDataReady = true;
+    uavInterconnectSlot_t * slot = findDevice(devId);
+    if (slot == NULL)
+        return false;
+
+    if (slotCanWrite(slot)) {
+        memcpy(slot->txPacket, buffer, UIB_PACKET_SIZE);
+        slot->txDataReady = true;
         return true;
     }
     
