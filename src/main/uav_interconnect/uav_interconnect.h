@@ -47,6 +47,8 @@ timeUs_t uibGetPollRateUs(uint8_t devId);
 uint32_t uibGetUnansweredRequests(uint8_t devId);
 bool uibDataAvailable(uint8_t devId);
 bool uibRead(uint8_t devId, uint8_t * buffer);
+bool uibCanWrite(uint8_t devId);
+bool uibWrite(uint8_t devId, const uint8_t * buffer);
 
 #define RANGEFINDER_UIB_TASK_PERIOD_MS  100
 bool uibRangefinderDetect(rangefinderDev_t *dev);

@@ -478,6 +478,11 @@ bool uibRead(uint8_t devId, uint8_t * buffer)
     if (!devices[devId])
         return false;
 
+    // If no READ capability - fail 
+    if (!(devices[devId]->deviceFlags & UIB_FLAG_HAS_READ))
+        return false;
+
+    // If no data ready - fail
     if (!devices[devId]->rxDataReady)
         return false;
 
@@ -487,4 +492,31 @@ bool uibRead(uint8_t devId, uint8_t * buffer)
     return true;
 }
 
+bool uibCanWrite(uint8_t devId)
+{
+    // No device available
+    if (!devices[devId])
+        return false;
+
+    // If no WRITE capability - fail 
+    if (!(devices[devId]->deviceFlags & UIB_FLAG_HAS_WRITE))
+        return false;
+
+    // If we have unsent data in the buffer - fail
+    if (devices[devId]->txDataReady)
+        return false;
+
+    return true;
+}
+
+bool uibWrite(uint8_t devId, const uint8_t * buffer)
+{
+    if (uibCanWrite(devId)) {
+        memcpy(devices[devId]->txPacket, buffer, UIB_PACKET_SIZE);
+        devices[devId]->txDataReady = true;
+        return true;
+    }
+    
+    return false;
+}
 #endif
