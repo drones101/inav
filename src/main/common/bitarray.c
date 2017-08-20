@@ -14,19 +14,25 @@
  * You should have received a copy of the GNU General Public License
  * along with Cleanflight.  If not, see <http://www.gnu.org/licenses/>.
  */
-#pragma once
 
-#define FTOA_BUFFER_SIZE 13
+#include <stdint.h>
+#include <stdbool.h>
 
-void uli2a(unsigned long int num, unsigned int base, int uc, char *bf);
-void li2a(long num, char *bf);
-void ui2a(unsigned int num, unsigned int base, int uc, char *bf);
-void i2a(int num, char *bf);
-char a2i(char ch, const char **src, int base, int *nump);
-char *ftoa(float x, char *floatString);
-float fastA2F(const char *p);
-unsigned long int fastA2UL(const char *p);
+#include "bitarray.h"
 
-#ifndef HAVE_ITOA_FUNCTION
-char *itoa(int i, char *a, int r);
-#endif
+#define BITARRAY_BIT_OP(array, bit, op) ((array)[(bit) / (sizeof((array)[0]) * 8)] op (1 << ((bit) % (sizeof((array)[0]) * 8))))
+
+bool bitArrayGet(const void *array, unsigned bit)
+{
+    return BITARRAY_BIT_OP((uint32_t*)array, bit, &);
+}
+
+void bitArraySet(void *array, unsigned bit)
+{
+    BITARRAY_BIT_OP((uint32_t*)array, bit, |=);
+}
+
+void bitArrayClr(void *array, unsigned bit)
+{
+    BITARRAY_BIT_OP((uint32_t*)array, bit, &=~);
+}

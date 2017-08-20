@@ -70,6 +70,7 @@
 
 #include "sensors/battery.h"
 #include "sensors/sensors.h"
+#include "sensors/pitotmeter.h"
 
 #ifdef USE_HARDWARE_REVISION_DETECTION
 #include "hardware_revision.h"
@@ -407,18 +408,19 @@ static bool osdDrawSingleElement(uint8_t item)
 
             for (int x = -4; x <= 4; x++) {
                 // clear the y area before writing the new horizon character
-                for (int y = 0; y <= 7; y++) {
+                for (int y = 0; y <= 8; y++) {
                     max7456WriteChar(elemPosX + x, elemPosY + y, 0x20);
                 }
                 int y = (rollAngle * x) / 64;
                 y -= pitchAngle;
                 // y += 41; // == 4 * 9 + 5
-                if (y >= 0 && y <= 81) {
+                if (y >= 0 && y <= 80) {
                     max7456WriteChar(elemPosX + x, elemPosY + (y / 9), (SYM_AH_BAR9_0 + (y % 9)));
                 }
             }
 
             osdDrawSingleElement(OSD_HORIZON_SIDEBARS);
+            osdDrawSingleElement(OSD_CROSSHAIRS);
 
             return true;
         }
@@ -490,7 +492,7 @@ static bool osdDrawSingleElement(uint8_t item)
         {
             int16_t value = getEstimatedActualVelocity(Z) / 10; //limit precision to 10cm
 
-            tfp_sprintf(buff, "%c%d.%01d%c", value < 0 ? '-' : ' ', abs(value / 10), abs((value % 10)), 0x9F);
+            tfp_sprintf(buff, "%c%d.%01d%c ", value < 0 ? '-' : ' ', abs(value / 10), abs((value % 10)), 0x9F);
             break;
         }
 #endif
@@ -516,6 +518,16 @@ static bool osdDrawSingleElement(uint8_t item)
     case OSD_POWER:
         {
             tfp_sprintf(buff, "%dW", amperage * vbat / 1000);
+            break;
+        }
+
+    case OSD_AIR_SPEED:
+        {
+        #ifdef PITOT
+            osdFormatVelocityStr(buff, pitot.airSpeed);
+        #else 
+            return false;
+        #endif
             break;
         }
 
@@ -583,7 +595,6 @@ void osdDrawElements(void)
 #endif
     {
         osdDrawSingleElement(OSD_ARTIFICIAL_HORIZON);
-        osdDrawSingleElement(OSD_CROSSHAIRS);
     }
 
     osdDrawSingleElement(OSD_MAIN_BATT_VOLTAGE);
@@ -626,6 +637,11 @@ void osdDrawElements(void)
     osdDrawSingleElement(OSD_VARIO_NUM);
 #endif // defined
 
+#ifdef PITOT
+    if (sensors(SENSOR_PITOT)) {
+        osdDrawSingleElement(OSD_AIR_SPEED);
+    }
+#endif
 }
 
 
@@ -664,6 +680,8 @@ void pgResetFn_osdConfig(osdConfig_t *osdConfig)
     osdConfig->item_pos[OSD_PITCH_PIDS] = OSD_POS(2, 11);
     osdConfig->item_pos[OSD_YAW_PIDS] = OSD_POS(2, 12);
     osdConfig->item_pos[OSD_POWER] = OSD_POS(15, 1);
+
+    osdConfig->item_pos[OSD_AIR_SPEED] = OSD_POS(3, 5);
 
     osdConfig->rssi_alarm = 20;
     osdConfig->cap_alarm = 2200;

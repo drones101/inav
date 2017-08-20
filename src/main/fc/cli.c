@@ -71,6 +71,7 @@ extern uint8_t __config_end;
 #include "fc/controlrate_profile.h"
 #include "fc/rc_adjustments.h"
 #include "fc/rc_controls.h"
+#include "fc/rc_modes.h"
 #include "fc/runtime_config.h"
 
 #include "flight/failsafe.h"
@@ -981,6 +982,7 @@ static const clivalue_t valueTable[] = {
     { "osd_pid_pitch_pos",          VAR_UINT16 | MASTER_VALUE, .config.minmax = { 0, OSD_POS_MAX_CLI }, PG_OSD_CONFIG, offsetof(osdConfig_t, item_pos[OSD_PITCH_PIDS]) },
     { "osd_pid_yaw_pos",            VAR_UINT16 | MASTER_VALUE, .config.minmax = { 0, OSD_POS_MAX_CLI }, PG_OSD_CONFIG, offsetof(osdConfig_t, item_pos[OSD_YAW_PIDS]) },
     { "osd_power_pos",              VAR_UINT16 | MASTER_VALUE, .config.minmax = { 0, OSD_POS_MAX_CLI }, PG_OSD_CONFIG, offsetof(osdConfig_t, item_pos[OSD_POWER]) },
+    { "osd_air_speed",              VAR_UINT16 | MASTER_VALUE, .config.minmax = { 0, OSD_POS_MAX_CLI }, PG_OSD_CONFIG, offsetof(osdConfig_t, item_pos[OSD_AIR_SPEED]) },
 #endif
 // PG_SYSTEM_CONFIG
 #ifdef USE_I2C
@@ -1494,14 +1496,14 @@ static void printSerial(uint8_t dumpMask, const serialConfig_t *serialConfig, co
                 && serialConfig->portConfigs[i].msp_baudrateIndex == serialConfigDefault->portConfigs[i].msp_baudrateIndex
                 && serialConfig->portConfigs[i].gps_baudrateIndex == serialConfigDefault->portConfigs[i].gps_baudrateIndex
                 && serialConfig->portConfigs[i].telemetry_baudrateIndex == serialConfigDefault->portConfigs[i].telemetry_baudrateIndex
-                && serialConfig->portConfigs[i].blackbox_baudrateIndex == serialConfigDefault->portConfigs[i].blackbox_baudrateIndex;
+                && serialConfig->portConfigs[i].peripheral_baudrateIndex == serialConfigDefault->portConfigs[i].peripheral_baudrateIndex;
             cliDefaultPrintf(dumpMask, equalsDefault, format,
                 serialConfigDefault->portConfigs[i].identifier,
                 serialConfigDefault->portConfigs[i].functionMask,
                 baudRates[serialConfigDefault->portConfigs[i].msp_baudrateIndex],
                 baudRates[serialConfigDefault->portConfigs[i].gps_baudrateIndex],
                 baudRates[serialConfigDefault->portConfigs[i].telemetry_baudrateIndex],
-                baudRates[serialConfigDefault->portConfigs[i].blackbox_baudrateIndex]
+                baudRates[serialConfigDefault->portConfigs[i].peripheral_baudrateIndex]
             );
         }
         cliDumpPrintf(dumpMask, equalsDefault, format,
@@ -1510,7 +1512,7 @@ static void printSerial(uint8_t dumpMask, const serialConfig_t *serialConfig, co
             baudRates[serialConfig->portConfigs[i].msp_baudrateIndex],
             baudRates[serialConfig->portConfigs[i].gps_baudrateIndex],
             baudRates[serialConfig->portConfigs[i].telemetry_baudrateIndex],
-            baudRates[serialConfig->portConfigs[i].blackbox_baudrateIndex]
+            baudRates[serialConfig->portConfigs[i].peripheral_baudrateIndex]
             );
     }
 }
@@ -1580,7 +1582,7 @@ static void cliSerial(char *cmdline)
                 if (baudRateIndex < BAUD_19200 || baudRateIndex > BAUD_250000) {
                     continue;
                 }
-                portConfig.blackbox_baudrateIndex = baudRateIndex;
+                portConfig.peripheral_baudrateIndex = baudRateIndex;
                 break;
         }
 
@@ -3063,7 +3065,7 @@ static void cliSet(char *cmdline)
 
                                 value = atoi(eqptr);
                                 valuef = fastA2F(eqptr);
-                                uvalue = strtoul(eqptr, NULL, 10);
+                                uvalue = fastA2UL(eqptr);
                                 // note: compare float values
                                 if ((mode == MODE_DIRECT && (valuef >= valueTable[i].config.minmax.min && valuef <= valueTable[i].config.minmax.max))
                                      || (mode == MODE_MAX && (valuef >= 0 && valuef <= valueTable[i].config.max.max))) {

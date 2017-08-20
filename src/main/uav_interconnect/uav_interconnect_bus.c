@@ -31,6 +31,7 @@
 #include "common/maths.h"
 #include "common/axis.h"
 #include "common/utils.h"
+#include "common/crc.h"
 
 #include "config/parameter_group.h"
 #include "config/parameter_group_ids.h"
@@ -121,44 +122,22 @@ static void switchState(uavInterconnectState_t newState)
     busState = newState;
 }
 
-static uint8_t uavCalculateCRC(uint8_t * buf, int size)
-{
-    uint8_t crc = 0x00;
-    for (int i = 0; i < size; i++) {
-        crc = crc8_dvb_s2(crc, buf[i]);
-    }
-    return crc;
-}
-
 static void sendDiscover(timeUs_t currentTimeUs, uint8_t slot, uint8_t devId)
 {
     uint8_t buf[3];
     buf[0] = UIB_COMMAND_IDENTIFY | slot;
     buf[1] = devId;
-    buf[2] = uavCalculateCRC(&buf[0], 2);
+    buf[2] = crc8_dvb_s2_update(0x00, &buf[0], 2);
     slotStartTimeUs = currentTimeUs;
     serialWriteBuf(busPort, buf, 3);
     uibStats.sentCommands++;
-/*
-    uint8_t buf[8];
-    buf[0] = UIB_COMMAND_IDENTIFY | slot;
-    buf[1] = devId;
-    buf[2] = uavCalculateCRC(&buf[0], 2);
-    buf[3] = 0x00;
-    buf[4] = 0x64;
-    buf[5] = 0x00;
-    buf[6] = UIB_FLAG_HAS_READ | UIB_FLAG_HAS_WRITE;
-    buf[7] = uavCalculateCRC(&buf[0], 7);
-    slotStartTimeUs = currentTimeUs;
-    serialWriteBuf(busPort, buf, 8);
-*/
 }
 
 static void sendRead(timeUs_t currentTimeUs, uint8_t slot)
 {
     uint8_t buf[2];
     buf[0] = UIB_COMMAND_READ | slot;
-    buf[1] = uavCalculateCRC(&buf[0], 1);
+    buf[1] = crc8_dvb_s2_update(0x00, &buf[0], 1);
     slotStartTimeUs = currentTimeUs;
     serialWriteBuf(busPort, buf, 2);
     uibStats.sentCommands++;
@@ -169,7 +148,7 @@ static void sendWrite(timeUs_t currentTimeUs, uint8_t slot, uint8_t * data)
     uint8_t buf[UIB_PACKET_SIZE + 2];
     buf[0] = UIB_COMMAND_WRITE | slot;
     memcpy(&buf[1], data, UIB_PACKET_SIZE);
-    buf[UIB_PACKET_SIZE + 1] = uavCalculateCRC(&buf[0], UIB_PACKET_SIZE + 1);
+    buf[UIB_PACKET_SIZE + 1] = crc8_dvb_s2_update(0x00, &buf[0], UIB_PACKET_SIZE + 1);
     slotStartTimeUs = currentTimeUs;
     serialWriteBuf(busPort, buf, UIB_PACKET_SIZE + 2);
     uibStats.sentCommands++;
@@ -198,7 +177,7 @@ static void uavInterconnectProcessSlot(void)
         //      DEV:    PollInterval[2] + Flags[2] + DevParams[4] + CRC2[1]
         case UIB_COMMAND_IDENTIFY:
             if (slotDataBufferCount == 12) {
-                if (uavCalculateCRC(&slotDataBuffer[0], 11) == slotDataBuffer[11]) {
+                if (crc8_dvb_s2_update(0x00, &slotDataBuffer[0], 11) == slotDataBuffer[11]) {
                     // CRC valid - process valid IDENTIFY slot
                     if (slots[slot].allocated && (slots[slot].deviceAddress == slotDataBuffer[1])) {
                         // This is a refresh - only update devFlags & pollInterval
@@ -242,7 +221,7 @@ static void uavInterconnectProcessSlot(void)
         //      DEV:    Data[16] + CRC2[1]
         case UIB_COMMAND_READ:
             if (slotDataBufferCount == (UIB_PACKET_SIZE + 3)) {
-                if (uavCalculateCRC(&slotDataBuffer[0], UIB_PACKET_SIZE + 2) == slotDataBuffer[UIB_PACKET_SIZE + 2]) {
+                if (crc8_dvb_s2_update(0x00, &slotDataBuffer[0], UIB_PACKET_SIZE + 2) == slotDataBuffer[UIB_PACKET_SIZE + 2]) {
                     // CRC valid - process valid READ slot
                     // Check if this slot has read capability and is allocated
                     if (slots[slot].allocated && (slots[slot].deviceFlags & UIB_FLAG_HAS_READ)) {
@@ -268,7 +247,7 @@ static void uavInterconnectProcessSlot(void)
         //      DEV:    ACK[1] + CRC2[1]
         case UIB_COMMAND_WRITE:
             if (slotDataBufferCount == (UIB_PACKET_SIZE + 4)) {
-                if (uavCalculateCRC(&slotDataBuffer[0], UIB_PACKET_SIZE + 3) == slotDataBuffer[UIB_PACKET_SIZE + 3]) {
+                if (crc8_dvb_s2_update(0x00, &slotDataBuffer[0], UIB_PACKET_SIZE + 3) == slotDataBuffer[UIB_PACKET_SIZE + 3]) {
                     slots[slot].unrepliedRequests = 0;
                 }
                 else {
