@@ -55,7 +55,7 @@ typedef enum {
     UIB_FLAG_HAS_WRITE      = (1 << 1),     // Device supports WRITE command (sensor configuration or executive device)
 } uibDeviceFlags_e;
 
-#define UIB_MAX_SLOTS           16
+#define UIB_MAX_SLOTS           16          // 64 is design maximum
 #define UIB_BIT_RATE            115200
 #define UIB_PORT_OPTIONS        (SERIAL_NOT_INVERTED | SERIAL_STOPBITS_1 | SERIAL_PARITY_NO | SERIAL_UNIDIR)
 
