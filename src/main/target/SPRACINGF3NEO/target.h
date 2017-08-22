@@ -54,6 +54,7 @@
 #define USE_MAG_AK8975
 #define USE_MAG_HMC5883
 
+#define USB_IO
 #define USE_VCP
 #define USE_UART1
 #define USE_UART2

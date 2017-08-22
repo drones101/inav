@@ -50,6 +50,7 @@
 #define USE_MAG_MAG3110
 #define MAG_AK8975_ALIGN        CW180_DEG_FLIP
 
+#define USB_IO
 #define USE_VCP
 #define USE_UART1 // Conn 1 - TX (PB6) RX PB7 (AF7)
 #define USE_UART2 // Input - RX (PA3)

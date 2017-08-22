@@ -112,6 +112,7 @@
 #define USE_FLASH_M25P16
 
 // *************** UART *****************************
+#define USB_IO
 #define USE_VCP
 
 // provide for Telemetry module

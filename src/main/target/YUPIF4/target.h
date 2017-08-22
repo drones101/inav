@@ -76,6 +76,7 @@
 #define USE_BARO_BMP280
 
 // Serial Ports
+#define USB_IO
 #define USE_VCP
 
 #define USE_UART1
