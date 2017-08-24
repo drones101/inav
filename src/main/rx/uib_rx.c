@@ -39,8 +39,9 @@
 typedef struct __attribute__((packed)) {
     uint8_t  flags;         // UIB_DATA_VALID (0x01) - link ok, UIB_DATA_NEW (0x02) - new data
     uint8_t  rssi;
-    uint16_t sticks[4];     // Values in range [1000;2000], center = 1500
-    uint8_t  aux[6];        // Values in range [0;255], center = 127
+    uint8_t  sticks[4];     // Values in range [0;255], center = 127
+    uint8_t  aux[8];        // Analog AUX channels - values in range [0;255], center = 127
+    uint16_t reserved;      // Reserved for future use
 } rcReceiverData_t;
 
 typedef union __attribute__((packed)) {
@@ -50,20 +51,29 @@ typedef union __attribute__((packed)) {
 
 static uibDataPacket_t uibData;
 
-#define UIB_RX_MAX_CHANNEL_COUNT    11
+#define UIB_RX_MAX_CHANNEL_COUNT    16
 
 static uint16_t rxUIBReadRawRC(const rxRuntimeConfig_t *rxRuntimeConfigPtr, uint8_t chan)
 {
     UNUSED(rxRuntimeConfigPtr);
 
-    if (chan < 4) {
-        return constrain(uibData.rc.sticks[chan], 1000, 2000);
-    }
-    else if (chan < 10) {
-        return scaleRange(uibData.rc.sticks[chan - 4], 0, 255, 1000, 2000);
-    }
-    else {
-        return scaleRange(uibData.rc.rssi, 0, 255, 1000, 2000);
+    switch (chan) {
+        case 0 ... 3:
+            return scaleRange(uibData.rc.sticks[chan], 0, 255, 1000, 2000);
+
+        case 4 ... 11:
+            return scaleRange(uibData.rc.aux[chan - 4], 0, 255, 1000, 2000);
+
+        case 12:
+        case 13:
+        case 14:
+            return 1500;
+
+        case 15:
+            return scaleRange(uibData.rc.rssi, 0, 255, 1000, 2000);
+
+        default:
+            return 1500;
     }
 }
 
