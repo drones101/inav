@@ -69,7 +69,7 @@ static void uibRangefinderUpdate(rangefinderDev_t *dev)
     }
 
     // If bus didn't detect the yet - report failure
-    if (!uibDeviceDetected(UIB_DEVICE_ADDRESS)) {
+    if (!uibDetectAndActivateDevice(UIB_DEVICE_ADDRESS)) {
         lastCalculatedDistance = RANGEFINDER_HARDWARE_FAILURE;
         return;
     }

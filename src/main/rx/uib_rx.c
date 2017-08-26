@@ -84,7 +84,7 @@ static uint8_t rxUIBFrameStatus(void)
     }
 
     // If bus didn't detect the yet - report failure
-    if (!uibDeviceDetected(UIB_DEVICE_ADDRESS)) {
+    if (!uibDetectAndActivateDevice(UIB_DEVICE_ADDRESS)) {
         return RX_FRAME_FAILSAFE;
     }
 

@@ -66,6 +66,7 @@ typedef enum {
 
 typedef struct {
     bool        allocated;
+    bool        activated;
     uint8_t     deviceAddress;
     uint16_t    deviceFlags;
     uint8_t     devParams[4];
@@ -278,7 +279,8 @@ static void processScheduledTransactions(timeUs_t currentTimeUs)
 
     // First - find device with highest priority that has the READ capability and is scheduled for READ
     for (int i = 0; i < UIB_MAX_SLOTS; i++) {
-        if (!slots[i].allocated) 
+        // Only do scheduled READs on allocated and active slots
+        if (!(slots[i].allocated && slots[i].activated))
             continue;
 
         if ((slots[i].deviceFlags & UIB_FLAG_HAS_READ) && ((currentTimeUs - slots[i].lastPollTimeUs) >= slots[i].pollIntervalUs) && (slotPrio > slots[i].deviceAddress)) {
@@ -300,7 +302,8 @@ static void processScheduledTransactions(timeUs_t currentTimeUs)
     slotId = -1;
 
     for (int i = 0; i < UIB_MAX_SLOTS; i++) {
-        if (!slots[i].allocated) 
+        // Only do WRITEs on allocated and active slots
+        if (!(slots[i].allocated && slots[i].activated))
             continue;
 
         if (slots[i].txDataReady && (slots[i].deviceFlags & UIB_FLAG_HAS_WRITE) && (slotPrio > slots[i].deviceAddress)) {
@@ -319,6 +322,7 @@ static void processScheduledTransactions(timeUs_t currentTimeUs)
 
     // Neither READ nor WRITE command are queued - issue IDENTIFY once in a while
     if ((currentTimeUs - refreshStartTimeUs) > UIB_REFRESH_INTERVAL_US) {
+        // Rediscover all slots
         if (slots[refreshSlot].allocated) {
             sendDiscover(currentTimeUs, refreshSlot, slots[refreshSlot].deviceAddress);
             refreshStartTimeUs = currentTimeUs;
@@ -417,6 +421,7 @@ void uavInterconnectBusInit(void)
 {
     for (int i = 0; i < UIB_MAX_SLOTS; i++) {
         slots[i].allocated = false;
+        slots[i].activated = false;
     }
 
     serialPortConfig_t * portConfig = findSerialPortConfig(FUNCTION_UAV_INTERCONNECT);
@@ -436,11 +441,14 @@ bool uavInterconnectBusIsInitialized(void)
     return uibInitialized;
 }
 
-bool uibDeviceDetected(uint8_t devId)
+bool uibDetectAndActivateDevice(uint8_t devId)
 {
     uavInterconnectSlot_t * slot = findDevice(devId);
     if (slot == NULL)
         return false;
+
+    /* We have discovered device in out registry and code is asking to access it - activate device */
+    slot->activated = true;
 
     return slot->allocated;
 }
